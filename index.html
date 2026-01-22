@@ -1,0 +1,304 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>مواقيت الصلاة</title>
+    
+    <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@40,400,0,0" />
+
+    <style>
+        :root {
+            --bg-color: #1b4843;       
+            --card-border: #2c5c55;    
+            --accent-color: #eaddcf;   
+            --white: #ffffff;
+            --active-glow: rgba(234, 221, 207, 0.4);
+        }
+
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+
+        body {
+            font-family: 'Cairo', sans-serif;
+            background-color: var(--bg-color);
+            color: var(--white);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        .container {
+            width: 100%;
+            max-width: 600px;
+            text-align: center;
+        }
+
+        /* --- تنسيق الرأس --- */
+        .header {
+            margin-bottom: 20px;
+        }
+
+        .header h1 {
+            font-size: 2.2rem;
+            font-weight: 700;
+            margin-bottom: 5px;
+        }
+        
+        /* تنسيق التاريخ والموقع (تمت إعادته) */
+        .subtitle {
+            color: var(--accent-color);
+            font-size: 0.95rem;
+            margin-bottom: 15px;
+            opacity: 0.9;
+        }
+        
+        /* تنسيق صندوق العد التنازلي */
+        .countdown-box {
+            color: #fff;
+            font-size: 1rem;
+            margin-bottom: 20px;
+            background: rgba(0,0,0,0.25); /* خلفية أغمق قليلاً للتباين */
+            display: inline-block;
+            padding: 8px 25px;
+            border-radius: 50px;
+            border: 1px solid var(--card-border);
+            font-weight: 600;
+        }
+
+        /* --- الشبكة والبطاقات --- */
+        .grid {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 15px;
+        }
+
+        .card {
+            border: 1px solid var(--card-border);
+            border-radius: 8px;
+            padding: 20px 10px;
+            display: flex;
+            flex-direction: column; 
+            align-items: center;
+            justify-content: center;
+            aspect-ratio: 1/1; 
+            transition: all 0.3s ease;
+            background-color: rgba(27, 72, 67, 0.5);
+            position: relative;
+        }
+
+        /* تأثير التوهج للصلاة القادمة */
+        .card.active-card {
+            border-color: var(--accent-color);
+            background: linear-gradient(135deg, rgba(234, 221, 207, 0.15) 0%, rgba(27, 72, 67, 0.5) 100%);
+            box-shadow: 0 0 15px var(--active-glow);
+            transform: scale(1.05);
+            z-index: 2;
+        }
+
+        .material-symbols-outlined.icon {
+            font-size: 3rem; 
+            color: var(--accent-color);
+            margin-bottom: 15px;
+        }
+
+        .prayer-name {
+            font-size: 1.2rem;
+            font-weight: 700;
+            color: var(--white);
+            margin-bottom: 8px; 
+        }
+
+        .prayer-time {
+            font-size: 1.3rem;
+            font-weight: 400; 
+            color: var(--white);
+            font-family: sans-serif; 
+            direction: ltr; 
+        }
+
+        #loading { grid-column: span 3; padding: 20px; color: var(--accent-color); }
+
+        @media (max-width: 600px) {
+            .grid { grid-template-columns: repeat(2, 1fr); gap: 10px; }
+            #loading { grid-column: span 2; }
+            .header h1 { font-size: 1.8rem; }
+        }
+    </style>
+</head>
+<body>
+
+    <div class="container">
+        <div class="header">
+            <h1>مواقيت الصلاة</h1>
+            
+            <p id="date-display" class="subtitle">حسب التوقيت المحلي لمدينة عمان</p>
+            
+            <div id="status-box" class="countdown-box">
+                جاري تحميل الأوقات...
+            </div>
+        </div>
+
+        <div id="prayer-grid" class="grid"></div>
+    </div>
+
+    <script>
+        const iconMap = {
+            'الفجر': 'wb_twilight',
+            'الشروق': 'clear_day',
+            'الظهر': 'brightness_7',
+            'العصر': 'brightness_5',
+            'المغرب': 'brightness_medium',
+            'العشاء': 'brightness_4'
+        };
+
+        let prayerData = [];
+
+        async function getPrayTimes() {
+            const grid = document.getElementById('prayer-grid');
+            const dateDisplay = document.getElementById('date-display'); // مرجع لعنصر التاريخ
+
+            try {
+                const response = await fetch('/fetch-times');
+                const result = await response.json();
+                
+                const parser = new DOMParser();
+                const xmlDoc = parser.parseFromString(result.rawData, "text/xml");
+                
+                // --- استرجاع وتحديث التاريخ ---
+                const subtitle = xmlDoc.querySelector('subtitle');
+                if (subtitle) {
+                    dateDisplay.textContent = subtitle.textContent;
+                }
+                // -----------------------------
+
+                const entries = xmlDoc.querySelectorAll('entry title');
+                
+                grid.innerHTML = '';
+                prayerData = []; 
+
+                entries.forEach(entry => {
+                    const text = entry.textContent.trim();
+                    const parts = text.split(':'); 
+                    
+                    if (parts.length >= 2) {
+                        const name = parts[0].trim();
+                        const timeStr = text.replace(name + ':', '').trim(); 
+                        const iconName = iconMap[name] || 'schedule';
+
+                        // تحليل الوقت (ساعة ودقيقة)
+                        let hour = parseInt(timeStr.split(':')[0]);
+                        const minute = parseInt(timeStr.split(':')[1]);
+                        
+                        // تصحيح نظام 24 ساعة (تقريبي)
+                        if (['العصر', 'المغرب', 'العشاء'].includes(name) && hour < 12) {
+                            hour += 12;
+                        }
+                        if (name === 'الظهر' && hour < 11) { 
+                             hour += 12; 
+                        }
+
+                        prayerData.push({
+                            name: name,
+                            timeDisplay: timeStr,
+                            hour: hour,
+                            minute: minute,
+                            icon: iconName,
+                            isPrayer: name !== 'الشروق' 
+                        });
+                    }
+                });
+
+                renderCards();
+                startCountdown();
+                setInterval(startCountdown, 1000); 
+
+            } catch (error) {
+                console.error(error);
+                grid.innerHTML = '<div style="color:white; grid-column: span 3;">خطأ في الاتصال</div>';
+            }
+        }
+
+        function renderCards() {
+            const grid = document.getElementById('prayer-grid');
+            grid.innerHTML = '';
+            
+            prayerData.forEach((prayer, index) => {
+                const card = document.createElement('div');
+                card.className = 'card';
+                card.id = `card-${index}`; 
+                
+                card.innerHTML = `
+                    <span class="material-symbols-outlined icon">${prayer.icon}</span>
+                    <div class="prayer-name">${prayer.name}</div>
+                    <div class="prayer-time">${prayer.timeDisplay}</div>
+                `;
+                grid.appendChild(card);
+            });
+        }
+
+        function startCountdown() {
+            const now = new Date();
+            const currentHours = now.getHours();
+            const currentMinutes = now.getMinutes();
+            const currentSeconds = now.getSeconds();
+            
+            let nextPrayer = null;
+            let nextPrayerIndex = -1;
+            let minDiffMinutes = Infinity;
+
+            // البحث عن الصلاة القادمة
+            for (let i = 0; i < prayerData.length; i++) {
+                const p = prayerData[i];
+                if (!p.isPrayer) continue; 
+
+                const prayerMinutes = (p.hour * 60) + p.minute;
+                const nowMinutes = (currentHours * 60) + currentMinutes;
+                
+                let diff = prayerMinutes - nowMinutes;
+                
+                if (diff > 0 && diff < minDiffMinutes) {
+                    minDiffMinutes = diff;
+                    nextPrayer = p;
+                    nextPrayerIndex = i;
+                }
+            }
+
+            // إذا انتهت صلوات اليوم، القادمة هي الفجر غداً
+            if (!nextPrayer) {
+                nextPrayerIndex = prayerData.findIndex(p => p.name === 'الفجر');
+                nextPrayer = prayerData[nextPrayerIndex];
+                
+                const prayerMinutes = (nextPrayer.hour * 60) + nextPrayer.minute + 1440;
+                const nowMinutes = (currentHours * 60) + currentMinutes;
+                minDiffMinutes = prayerMinutes - nowMinutes;
+            }
+
+            // حساب الوقت المتبقي للعرض
+            // ملاحظة: هذا حساب بسيط للـ UI. لدقة أعلى بالثواني:
+            const targetTime = new Date();
+            targetTime.setHours(nextPrayer.hour, nextPrayer.minute, 0, 0);
+            if (targetTime < now) { targetTime.setDate(targetTime.getDate() + 1); }
+            
+            const diffMs = targetTime - now;
+            const h = Math.floor(diffMs / (1000 * 60 * 60));
+            const m = Math.floor((diffMs % (1000 * 60 * 60)) / (1000 * 60));
+            const s = Math.floor((diffMs % (1000 * 60)) / 1000);
+
+            const timeString = `${h.toString().padStart(2,'0')}:${m.toString().padStart(2,'0')}:${s.toString().padStart(2,'0')}`;
+
+            document.getElementById('status-box').innerHTML = 
+                `القادمة: <span style="color:#ffd700">${nextPrayer.name}</span> خلال <span style="direction:ltr; display:inline-block; font-family:monospace">${timeString}</span>`;
+
+            // تفعيل "توهج" البطاقة
+            document.querySelectorAll('.card').forEach(c => c.classList.remove('active-card'));
+            const activeCard = document.getElementById(`card-${nextPrayerIndex}`);
+            if (activeCard) activeCard.classList.add('active-card');
+        }
+
+        getPrayTimes();
+    </script>
+</body>
+</html>
